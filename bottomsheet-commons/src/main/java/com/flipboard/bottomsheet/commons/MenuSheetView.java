@@ -3,14 +3,16 @@ package com.flipboard.bottomsheet.commons;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Build;
+import android.support.annotation.LayoutRes;
 import android.support.annotation.MenuRes;
 import android.support.annotation.Nullable;
 import android.support.annotation.StringRes;
 import android.support.v4.view.ViewCompat;
+import android.support.v7.view.SupportMenuInflater;
+import android.support.v7.view.menu.MenuBuilder;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.Menu;
-import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.SubMenu;
 import android.view.View;
@@ -21,7 +23,6 @@ import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
 import android.widget.GridView;
 import android.widget.ImageView;
-import android.widget.PopupMenu;
 import android.widget.TextView;
 
 import java.util.ArrayList;
@@ -40,6 +41,9 @@ import static com.flipboard.bottomsheet.commons.MenuSheetView.MenuType.LIST;
  */
 @SuppressLint("ViewConstructor")
 public class MenuSheetView extends FrameLayout {
+
+    public static final int DEFAULT_LAYOUT_LIST_ITEM = R.layout.sheet_list_item;
+    public static final int DEFAULT_LAYOUT_GRID_ITEM = R.layout.sheet_grid_item;
 
     /**
      * A listener for menu item clicks in the sheet
@@ -61,6 +65,8 @@ public class MenuSheetView extends FrameLayout {
     private final TextView titleView;
     protected final int originalListPaddingTop;
     private int columnWidthDp = 100;
+    private int listItemLayoutRes = DEFAULT_LAYOUT_LIST_ITEM;
+    private int gridItemLayoutRes = DEFAULT_LAYOUT_GRID_ITEM;
 
     /**
      * @param context Context to construct the view with
@@ -82,7 +88,7 @@ public class MenuSheetView extends FrameLayout {
         super(context);
 
         // Set up the menu
-        this.menu = new PopupMenu(context, null).getMenu();  // Dirty hack to get a menu instance since MenuBuilder isn't public ಠ_ಠ
+        this.menu = new MenuBuilder(context);
         this.menuType = menuType;
 
         // Inflate the appropriate view and set up the absListView
@@ -112,7 +118,7 @@ public class MenuSheetView extends FrameLayout {
      */
     public void inflateMenu(@MenuRes int menuRes) {
         if (menuRes != -1) {
-            MenuInflater inflater = new MenuInflater(getContext());
+            SupportMenuInflater inflater = new SupportMenuInflater(getContext());
             inflater.inflate(menuRes, menu);
         }
 
@@ -253,6 +259,25 @@ public class MenuSheetView extends FrameLayout {
     }
 
     /**
+     * Override the layout for displaying a list item when of type {@link MenuType#LIST}. <br>
+     * Call this before you attach to window using {@link com.flipboard.bottomsheet.BottomSheetLayout#showWithSheetView}.
+     * @param listItemLayoutRes needs to have an {@link ImageView} with id set to {@link R.id#icon} and {@link TextView} with id set to {@link R.id#label}
+     */
+    public void setListItemLayoutRes(@LayoutRes int listItemLayoutRes) {
+        this.listItemLayoutRes = listItemLayoutRes;
+    }
+
+    /**
+     * Override the layout for displaying a grid item when of type {@link MenuType#GRID}. <br>
+     * Call this before you attach to window using {@link com.flipboard.bottomsheet.BottomSheetLayout#showWithSheetView}.
+     * @param gridItemLayoutRes needs to have an {@link ImageView} with id set to {@link R.id#icon} and {@link TextView} with id set to {@link R.id#label}
+     */
+    public void setGridItemLayoutRes(@LayoutRes int gridItemLayoutRes) {
+        this.gridItemLayoutRes = gridItemLayoutRes;
+    }
+
+
+    /**
      * @return The current title text of the sheet
      */
     public CharSequence getTitle() {
@@ -313,7 +338,7 @@ public class MenuSheetView extends FrameLayout {
                 case VIEW_TYPE_NORMAL:
                     NormalViewHolder holder;
                     if (convertView == null) {
-                        convertView = inflater.inflate(menuType == GRID ? R.layout.sheet_grid_item : R.layout.sheet_list_item, parent, false);
+                        convertView = inflater.inflate(menuType == GRID ? gridItemLayoutRes : listItemLayoutRes, parent, false);
                         holder = new NormalViewHolder(convertView);
                         convertView.setTag(holder);
                     } else {

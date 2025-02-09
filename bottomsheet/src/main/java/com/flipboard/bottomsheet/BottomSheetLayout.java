@@ -100,6 +100,7 @@ public class BottomSheetLayout extends FrameLayout {
     private boolean interceptContentTouch = true;
     private int currentSheetViewHeight;
     private boolean hasIntercepted;
+    private float peekKeyline;
     private float peek;
 
     /** Some values we need to manage width on tablets */
@@ -151,14 +152,15 @@ public class BottomSheetLayout extends FrameLayout {
         dimView.setAlpha(0);
         dimView.setVisibility(INVISIBLE);
 
-        peek = 0;//getHeight() return 0 at start!
-
         setFocusableInTouchMode(true);
 
         Point point = new Point();
         ((WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getSize(point);
         screenWidth = point.x;
         sheetEndX = screenWidth;
+
+        peek = 0; //getHeight() return 0 at start!
+        peekKeyline = point.y - (screenWidth / (16.0f / 9.0f));
     }
 
     /**
@@ -239,8 +241,8 @@ public class BottomSheetLayout extends FrameLayout {
         return super.onKeyPreIme(keyCode, event);
     }
 
-    private void setSheetTranslation(float sheetTranslation) {
-        this.sheetTranslation = sheetTranslation;
+    private void setSheetTranslation(float newTranslation) {
+        this.sheetTranslation = Math.min(newTranslation, getMaxSheetTranslation());
         int bottomClip = (int) (getHeight() - Math.ceil(sheetTranslation));
         this.contentClipRect.set(0, 0, getWidth(), bottomClip);
         getSheetView().setTranslationY(getHeight() - sheetTranslation);
@@ -450,10 +452,10 @@ public class BottomSheetLayout extends FrameLayout {
             ViewGroup vg = (ViewGroup) view;
             for (int i = 0; i < vg.getChildCount(); i++) {
                 View child = vg.getChildAt(i);
-                int childLeft = child.getLeft();
-                int childTop = child.getTop();
-                int childRight = child.getRight();
-                int childBottom = child.getBottom();
+                int childLeft = child.getLeft() - view.getScrollX();
+                int childTop = child.getTop() - view.getScrollY();
+                int childRight = child.getRight() - view.getScrollX();
+                int childBottom = child.getBottom() - view.getScrollY();
                 boolean intersects = x > childLeft && x < childRight && y > childTop && y < childBottom;
                 if (intersects && canScrollUp(child, x - childLeft, y - childTop)) {
                     return true;
@@ -470,10 +472,16 @@ public class BottomSheetLayout extends FrameLayout {
     }
 
     private void setState(State state) {
-        this.state = state;
-        for (OnSheetStateChangeListener onSheetStateChangeListener : onSheetStateChangeListeners) {
-            onSheetStateChangeListener.onSheetStateChanged(state);
+        if (state != this.state) {
+            this.state = state;
+            for (OnSheetStateChangeListener onSheetStateChangeListener : onSheetStateChangeListeners) {
+                onSheetStateChangeListener.onSheetStateChanged(state);
+            }
         }
+    }
+
+    private boolean hasTallerKeylineHeightSheet() {
+        return getSheetView() == null || getSheetView().getHeight() > peekKeyline;
     }
 
     private boolean hasFullHeightSheet() {
@@ -543,7 +551,7 @@ public class BottomSheetLayout extends FrameLayout {
     }
 
     private float getDefaultPeekTranslation() {
-        return hasFullHeightSheet() ? getHeight() / 3 : getSheetView().getHeight();
+        return hasTallerKeylineHeightSheet() ? peekKeyline : getSheetView().getHeight();
     }
 
     /**
@@ -666,12 +674,19 @@ public class BottomSheetLayout extends FrameLayout {
             @Override
             public void onLayoutChange(View sheetView, int left, int top, int right, int bottom, int oldLeft, int oldTop, int oldRight, int oldBottom) {
                 int newSheetViewHeight = sheetView.getMeasuredHeight();
-                if (state != State.HIDDEN && newSheetViewHeight < currentSheetViewHeight) {
+                if (state != State.HIDDEN) {
                     // The sheet can no longer be in the expanded state if it has shrunk
-                    if (state == State.EXPANDED) {
-                        setState(State.PEEKED);
+                    if (newSheetViewHeight < currentSheetViewHeight) {
+                        if (state == State.EXPANDED) {
+                            setState(State.PEEKED);
+                        }
+                        setSheetTranslation(newSheetViewHeight);
+                    } else if (currentSheetViewHeight > 0 && newSheetViewHeight > currentSheetViewHeight && state == State.PEEKED) {
+                        if (newSheetViewHeight == getMaxSheetTranslation()) {
+                            setState(State.EXPANDED);
+                        }
+                        setSheetTranslation(newSheetViewHeight);
                     }
-                    setSheetTranslation(newSheetViewHeight);
                 }
                 currentSheetViewHeight = newSheetViewHeight;
             }
@@ -685,7 +700,7 @@ public class BottomSheetLayout extends FrameLayout {
     public void dismissSheet() {
         dismissSheet(null);
     }
-    
+
     private void dismissSheet(Runnable runAfterDismissThis) {
         if (state == State.HIDDEN) {
             runAfterDismiss = null;
@@ -715,8 +730,6 @@ public class BottomSheetLayout extends FrameLayout {
 
                     // Remove sheet specific properties
                     viewTransformer = null;
-                    onSheetDismissedListeners.clear();
-                    onSheetStateChangeListeners.clear();
                     if (runAfterDismiss != null) {
                         runAfterDismiss.run();
                         runAfterDismiss = null;
@@ -827,6 +840,8 @@ public class BottomSheetLayout extends FrameLayout {
 
     /**
      * Adds an {@link OnSheetStateChangeListener} which will be notified when the state of the presented sheet changes.
+     * The listener will not be automatically removed, so remember to remove it when it's no longer needed
+     * (probably when the sheet is HIDDEN)
      *
      * @param onSheetStateChangeListener the listener to be notified.
      */
@@ -837,6 +852,8 @@ public class BottomSheetLayout extends FrameLayout {
 
     /**
      * Adds an {@link OnSheetDismissedListener} which will be notified when the state of the presented sheet changes.
+     * The listener will not be automatically removed, so remember to remove it when it's no longer needed
+     * (probably when the sheet is HIDDEN)
      *
      * @param onSheetDismissedListener the listener to be notified.
      */
